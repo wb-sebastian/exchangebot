@@ -1,0 +1,17 @@
+# .gitignore
+
+# Ignore .env file
+.env
+
+# Node.js dependencies
+node_modules/
+
+# Logs
+logs/
+*.log
+
+# Optional: Ignore the npm-debug.log file
+npm-debug.log*
+
+# Ignore .DS_Store file (for macOS)
+.DS_Store
