@@ -9,6 +9,7 @@ app.get('/', (req, res) => {
 app.listen(port, () => {
   console.log(`Web server running on port ${port}`);
 });
+
 require('dotenv').config();
 const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
 const axios = require('axios');
@@ -32,8 +33,8 @@ const chartJSNodeCanvas = new ChartJSNodeCanvas({ width: WIDTH, height: HEIGHT }
 
 async function fetchSupportedCurrencies() {
   try {
-    const res = await axios.get('https://api.frankfurter.app/currencies');
-    Object.keys(res.data).forEach(code => supportedCurrencies.add(code.toUpperCase()));
+    const res = await axios.get('https://v6.exchangerate-api.com/v6/' + process.env.EXCHANGE_RATE_API_KEY + '/codes');
+    Object.keys(res.data.conversion_rates).forEach(code => supportedCurrencies.add(code.toUpperCase()));
   } catch (err) {
     console.error("Failed to fetch supported currencies", err);
   }
@@ -50,20 +51,41 @@ function isSuperAdmin(userId) {
 function detectCurrencyMentions(text) {
   const matches = [];
   const words = text.split(/\s+/);
+  
+  // Handle both orders: currency first or amount first
   for (let i = 0; i < words.length - 1; i++) {
     const currency = words[i].toUpperCase();
     const value = parseFloat(words[i + 1]);
-    if (supportedCurrencies.has(currency) && !isNaN(value)) {
-      matches.push({ currency, value });
+
+    // Handle currency being before the amount (e.g., "RON 500" or "USD 100")
+    if (!isNaN(value) && (supportedCurrencies.has(currency) || currency === "BUCKS" || currency === "PESOS")) {
+      matches.push({ currency: currency === "BUCKS" ? "USD" : currency === "PESOS" ? "MXN" : currency, value });
     }
   }
+
+  // Case where currency comes after the amount (e.g., "500 RON" or "500 bucks")
+  for (let i = 0; i < words.length - 1; i++) {
+    const value = parseFloat(words[i]);
+    const currency = words[i + 1].toUpperCase();
+
+    if (!isNaN(value) && (supportedCurrencies.has(currency) || currency === "BUCKS" || currency === "PESOS")) {
+      matches.push({ currency: currency === "BUCKS" ? "USD" : currency === "PESOS" ? "MXN" : currency, value });
+    }
+  }
+
   return matches;
 }
 
 async function fetchConversion(from, to, amount) {
-  const url = `https://api.frankfurter.app/latest?amount=${amount}&from=${from}&to=${to}`;
-  const res = await axios.get(url);
-  return res.data.rates[to];
+  const url = `https://v6.exchangerate-api.com/v6/${process.env.EXCHANGE_RATE_API_KEY}/latest/${from}`;
+  try {
+    const res = await axios.get(url);
+    const rate = res.data.conversion_rates[to];
+    return rate * amount;
+  } catch (error) {
+    console.error("Error fetching conversion rate:", error);
+    throw error;
+  }
 }
 
 async function fetchHistoricalData(currency, range) {
@@ -80,9 +102,14 @@ async function fetchHistoricalData(currency, range) {
   }
   start = now.toISOString().split('T')[0];
 
-  const url = `https://api.frankfurter.app/${start}..${end}?from=${currency}&to=USD`;
-  const res = await axios.get(url);
-  return res.data.rates;
+  const url = `https://v6.exchangerate-api.com/v6/${process.env.EXCHANGE_RATE_API_KEY}/history/${currency}?start_date=${start}&end_date=${end}`;
+  try {
+    const res = await axios.get(url);
+    return res.data.rates;
+  } catch (error) {
+    console.error("Error fetching historical data:", error);
+    throw error;
+  }
 }
 
 async function generateChart(data, currency) {
