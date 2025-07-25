@@ -55,15 +55,20 @@ function isSuperAdmin(userId) {
 function detectCurrencyMentions(text) {
   const matches = [];
   const words = text.split(/\s+/);
+
+  // Adjust detection for "amount currency" and "currency amount"
   for (let i = 0; i < words.length - 1; i++) {
     const currency = words[i].toUpperCase();
     const value = parseFloat(words[i + 1]);
-    
+
     // Check if the word is an alias for a currency
     if (currencyAliases[currency]) {
       matches.push({ currency, value });
     } else if (supportedCurrencies.has(currency) && !isNaN(value)) {
       matches.push({ currency, value });
+    } else if (!isNaN(currency) && supportedCurrencies.has(words[i + 1].toUpperCase())) {
+      // For "amount currency" scenario
+      matches.push({ currency: words[i + 1].toUpperCase(), value: parseFloat(currency) });
     }
   }
   return matches;
